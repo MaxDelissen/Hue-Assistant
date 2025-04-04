@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hue/domain/models/light/light.dart';
+import 'package:hue_assistant/utils/hue_actions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -34,6 +36,17 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  bool isOn = false;
+
+  Future<void> _debugSwitch() async {
+    HueActions actions = await HueActions.create();
+    List<Light> lights = await actions.getLights();
+    if (lights.isNotEmpty) {
+      Light light = lights.first;
+      await actions.setLightState(light, isOn);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -47,6 +60,16 @@ class _SettingsPageState extends State<SettingsPage> {
             value: _startTalkingOnLaunch,
             onChanged: _saveSettings,
           ),
+          SwitchListTile(
+            title: const Text('Switch first found light (debug)'),
+            value: false, // Debug switch, placeholder for future implementation
+            onChanged: (value)  {
+              setState(() {
+                isOn = value;
+              });
+              _debugSwitch();
+            },
+          )
         ],
       ),
     );

@@ -37,6 +37,7 @@ dependencies:
   permission_handler: ^11.4.0
   shared_preferences: ^2.5.3
   dynamic_color: ^1.7.0
+  flutter_hue: ^2.3.0
 
 dev_dependencies:
   flutter_test:
