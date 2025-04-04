@@ -12,11 +12,14 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   bool _startTalkingOnLaunch = false;
+  bool isOn = false;
+  Light? _light;
+  Light? _colorLight;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    _loadLightState();
   }
 
   /// Loads the saved setting value.
@@ -25,6 +28,19 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _startTalkingOnLaunch = prefs.getBool('startTalkingOnLaunch') ?? false;
     });
+  }
+
+  /// Loads the initial state of the light.
+  Future<void> _loadLightState() async {
+    HueActions actions = await HueActions.create();
+    List<Light> lights = await actions.getLights();
+    if (lights.isNotEmpty) {
+      setState(() {
+        _light = lights.first;
+        _colorLight = lights[1];
+        isOn = _light!.on.isOn;
+      });
+    }
   }
 
   /// Saves the setting when toggled.
@@ -36,14 +52,41 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  bool isOn = false;
+  /// Toggles the light state.
+  Future<void> _toggleLight(bool value) async {
+    if (_light != null) {
+      HueActions actions = await HueActions.create();
+      await actions.setLightState(_light!, value);
+      setState(() {
+        isOn = value;
+      });
+    }
+  }
 
-  Future<void> _debugSwitch() async {
-    HueActions actions = await HueActions.create();
-    List<Light> lights = await actions.getLights();
-    if (lights.isNotEmpty) {
-      Light light = lights.first;
-      await actions.setLightState(light, isOn);
+  bool lightColor = false;
+  Future<void> _toggleLightColor() async {
+    if (_light != null) {
+      if (lightColor) {
+        await _resetLightColor();
+      } else {
+        await _redLightColor();
+      }
+    }
+  }
+
+  Future<void> _redLightColor() async {
+    if (_light != null) {
+      HueActions actions = await HueActions.create();
+      Color color = Colors.red; // Example color
+      await actions.setLightColor(_colorLight!, color);
+    }
+  }
+
+  Future<void> _resetLightColor() async {
+    if (_light != null) {
+      HueActions actions = await HueActions.create();
+      Color color = Colors.white; // Example color
+      await actions.setLightColor(_colorLight!, color);
     }
   }
 
@@ -62,14 +105,21 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           SwitchListTile(
             title: const Text('Switch first found light (debug)'),
-            value: false, // Debug switch, placeholder for future implementation
-            onChanged: (value)  {
-              setState(() {
-                isOn = value;
-              });
-              _debugSwitch();
+            value: isOn,
+            onChanged: (value) {
+              _toggleLight(value);
             },
-          )
+          ),
+          SwitchListTile(
+            title: const Text('Change color of first found light (debug)'),
+            value: lightColor,
+            onChanged: (value) {
+              setState(() {
+                lightColor = !lightColor;
+              });
+              _toggleLightColor();
+            },
+          ),
         ],
       ),
     );
