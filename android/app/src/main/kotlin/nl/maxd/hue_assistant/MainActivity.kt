@@ -1,0 +1,5 @@
+package nl.maxd.hue_assistant
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()
