@@ -8,93 +8,89 @@ class HueActions {
 
   HueActions._(this.network);
 
-  //TODO: Implement the correct way to handle reconnecting to the bridge after app close, without having to re-discover the bridge.
-  static Future<HueActions> create() async {
-    if (_instance != null) {
-      return _instance!;
+  factory HueActions.getInstance() {
+    if (_instance == null) {
+      throw Exception('HueActions must be initialized with create() first');
     }
-
-    // Find the Hue bridges on the network
-    print("Looking for Hue bridges...");
-    List<DiscoveredBridge> bridges = await BridgeDiscoveryRepo.discoverBridges(
-      writeToLocal: false,
-    );
-    if (bridges.isEmpty) {
-      throw Exception('No Hue bridges found');
-    }
-    print("Found ${bridges.length} Hue bridges.");
-
-    // Use the first discovered bridge
-    String bridgeIp = bridges.first.ipAddress;
-    print("Using bridge at IP: $bridgeIp");
-
-    // Need to press the hue button within 30 seconds.
-    final DiscoveryTimeoutController controller = DiscoveryTimeoutController(
-      timeoutSeconds: 30,
-    );
-
-    // Attempt to connect to the bridge using the discovered IP address
-    print("Attempting to connect to bridge...");
-    Bridge? bridge = await BridgeDiscoveryRepo.firstContact(
-      bridgeIpAddr: bridgeIp,
-      controller: controller,
-    );
-
-    if (bridge == null) {
-      throw Exception('Failed to connect to Hue bridge');
-    }
-    print("Connected to bridge at IP: $bridgeIp");
-
-    // Create a HueNetwork instance with the discovered bridge
-    print("Creating HueNetwork instance...");
-    HueNetwork network = HueNetwork(bridges: [bridge]);
-    print("HueNetwork instance created.");
-    print("Fetching all data from the network...");
-    await network.fetchAll();
-    print("Data fetched successfully.");
-
-    _instance = HueActions._(network);
     return _instance!;
   }
 
-  Future<void> updateNetwork() async {
+  static Future<HueActions> create({bool forceRediscovery = false}) async {
+    if (_instance != null && !forceRediscovery) return _instance!;
+
+    List<Bridge> savedBridges = await BridgeDiscoveryRepo.fetchSavedBridges();
+    Bridge? bridge;
+
+    // Try to use saved bridges first
+    if (savedBridges.isNotEmpty && !forceRediscovery) {
+      print("Using saved bridge: ${savedBridges.first.ipAddress}");
+      bridge = savedBridges.first;
+    } else {
+      // Discover new bridges if no saved ones found
+      print("Discovering new bridges...");
+      final bridges = await BridgeDiscoveryRepo.discoverBridges(
+        writeToLocal: true,
+      );
+      if (bridges.isEmpty) throw Exception('No Hue bridges found');
+
+      final controller = DiscoveryTimeoutController(timeoutSeconds: 30);
+      final bridgeIp = bridges.first.ipAddress;
+
+      print("Attempting connection to $bridgeIp");
+      bridge = await BridgeDiscoveryRepo.firstContact(
+        bridgeIpAddr: bridgeIp,
+        controller: controller,
+      );
+
+      if (bridge == null) throw Exception('Failed to connect to bridge');
+    }
+
+    final network = HueNetwork(bridges: [bridge!]);
+    await network.fetchAll();
+
+    return _instance = HueActions._(network);
+  }
+
+  Future<void> refreshNetwork() async {
     try {
       await network.fetchAll();
     } catch (e) {
-      throw Exception('Failed to update network: $e');
+      throw Exception('Network refresh failed: $e');
     }
   }
 
-  Future<List<Light>> getLights() async {
+  Future<List<Light>> getLights({bool forceRefresh = false}) async {
     try {
-      List<Light> lights = network.lights;
-      return lights;
+      if (forceRefresh) await refreshNetwork();
+      return network.lights;
     } catch (e) {
-      throw Exception('Failed to get lights: $e');
+      throw Exception('Failed to fetch lights: $e');
     }
   }
 
-  Future<void> setLightState(Light light, bool on) async {
+  Future<void> updateLightState(Light light, {bool? on, Color? color}) async {
     try {
-      light.on.isOn = on;
-      await network.put();
-    } catch (e) {
-      throw Exception('Failed to set light state: $e');
-    }
-  }
+      Light updatedLight = light;
 
-  Future<void> setLightColor(Light light, Color color) async {
-    try {
-      ColorXy colorXy = color.toColorXy();
-      light = light.copyWith(
-        color: light.color.copyWith(xy: LightColorXy(
-          x: colorXy.x,
-          y: colorXy.y,
-        )),
-      );
-      await network.bridges.first.put(light);
+      if (on != null) {
+        updatedLight = updatedLight.copyWith(
+          on: updatedLight.on.copyWith(isOn: on),
+        );
+      }
+
+      if (color != null) {
+        final colorXy = color.toColorXy();
+        updatedLight = updatedLight.copyWith(
+          color: updatedLight.color.copyWith(
+            xy: LightColorXy(x: colorXy.x, y: colorXy.y),
+          ),
+        );
+      }
+
+      await network.bridges.first.put(updatedLight);
+      await refreshNetwork();
     } catch (e) {
-      throw Exception('Failed to set light color: $e');
+      throw Exception('Light update failed: $e');
     }
   }
 }
