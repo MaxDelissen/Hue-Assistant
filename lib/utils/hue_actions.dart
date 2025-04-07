@@ -68,7 +68,7 @@ class HueActions {
     }
   }
 
-  Future<void> updateLightState(Light light, {bool? on, Color? color}) async {
+  Future<void> updateLightState(Light light, {bool? on, Color? color, double? brightness}) async {
     try {
       Light updatedLight = light;
 
@@ -83,6 +83,15 @@ class HueActions {
         updatedLight = updatedLight.copyWith(
           color: updatedLight.color.copyWith(
             xy: LightColorXy(x: colorXy.x, y: colorXy.y),
+          ),
+        );
+      }
+
+      if (brightness != null) {
+        final double cappedBrightness = brightness.clamp(0, 100);
+        updatedLight = updatedLight.copyWith(
+          dimming: updatedLight.dimming.copyWith(
+            brightness: cappedBrightness,
           ),
         );
       }
